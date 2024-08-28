@@ -1,0 +1,175 @@
+#!/usr/bin/env node
+
+const fs = require("fs");
+const path = require("path");
+const { execSync } = require("child_process");
+
+// Function to replace environment variables in a file path
+function replaceEnvVars(filePath) {
+  return filePath.replace(/\$([A-Z_]+)/g, (match, envVar) => {
+    const value = process.env[envVar];
+    if (typeof value === "undefined") throw new Error(`Environment variable ${envVar} is not defined`);
+    return value;
+  });
+}
+
+// Function to render the output for a markdown file link
+function renderMarkdownLinkOutput(linkText, fileContent) {
+  return `\n# ${linkText}\n${fileContent}\n`;
+}
+
+// Function to render the output for a non-markdown file link
+function renderNonMarkdownLinkOutput(linkText, fileName, fileContent, fileExtension) {
+  return `\n# ${linkText}\nFile: ${fileName}\n\`\`\`${fileExtension.slice(1)}\n${fileContent}\n\`\`\`\n`;
+}
+
+// Function to replace file://... links in markdown content
+function replaceFileLinksInMarkdown(markdownFilePath, recursiveDepth = 0) {
+  if (recursiveDepth > 99) throw new Error("Recursion limit reached, you may have a circular reference");
+  const markdownContent = fs.readFileSync(markdownFilePath, "utf8");
+  const linkRegex = /\[([^\]]+)\]\(file:\/\/([^\)]+)\)/g;
+
+  return markdownContent.replace(
+    linkRegex,
+    (match, linkText, fileLinkWithEnvVar) => {
+      const fileLink = replaceEnvVars(fileLinkWithEnvVar);
+      const linkedFilePath = path.isAbsolute(fileLink) ? fileLink : path.resolve(path.dirname(markdownFilePath), fileLink);
+      if (!fs.existsSync(linkedFilePath)) return match; // If the file doesn't exist, keep the original link
+
+      const fileExtension = path.extname(linkedFilePath);
+      const fileName = path.basename(linkedFilePath);
+      const fileContent = replaceFileLinksInMarkdown(linkedFilePath, recursiveDepth + 1);
+
+      if (fileExtension === ".md") {
+        return renderMarkdownLinkOutput(linkText, fileContent);
+      } else {
+        return renderNonMarkdownLinkOutput(linkText, fileName, fileContent, fileExtension);
+      }
+    }
+  );
+}
+
+// Function to replace files://... links in markdown content
+function replaceFilesLinksInMarkdown(markdownContent, markdownFilePath) {
+  const linkRegex = /\[([^\]]+)\]\(files:\/\/([^\)]+)\)/g;
+
+  return markdownContent.replace(
+    linkRegex,
+    (match, linkText, fileLinkWithEnvVar) => {
+      const fileLink = replaceEnvVars(fileLinkWithEnvVar);
+      const linkedFilePathPattern = path.isAbsolute(fileLink) ? fileLink : path.resolve(path.dirname(markdownFilePath), fileLink);
+      if(!fs.globSync) throw new Error("glob is not supported in this environment, update to node >22");
+      const files = fs.globSync(linkedFilePathPattern);
+
+      if (files.length === 0) return match; // If no files match the pattern, keep the original link
+
+      return files.map(file => {
+        const fileExtension = path.extname(file);
+        const fileName = path.basename(file);
+        const fileContent = fs.readFileSync(file, "utf8");
+
+        if (fileExtension === ".md") {
+          return renderMarkdownLinkOutput(linkText, fileContent);
+        } else {
+          return renderNonMarkdownLinkOutput(linkText, fileName, fileContent, fileExtension);
+        }
+      }).join("\n");
+    }
+  );
+}
+
+// Combined function to replace all types of file links in markdown content
+function replaceLinksInMarkdown(markdownFilePath) {
+  let markdownContent = fs.readFileSync(markdownFilePath, "utf8");
+
+  // Replace file:// links
+  markdownContent = replaceFileLinksInMarkdown(markdownFilePath);
+  // Replace files:// links
+  markdownContent = replaceFilesLinksInMarkdown(markdownContent, markdownFilePath);
+
+  return markdownContent;
+}
+
+// Get the arguments passed to the script
+const args = process.argv.slice(2);
+
+// Define the flag that triggers completion output
+const completionFlag = "--complete";
+
+// Output Autocomplete Options
+if (args.includes(completionFlag)) {
+  // Get the PROMPTOR_PATH environment variable
+  const promptorPath = process.env.PROMPTOR_PATH;
+
+  if (!promptorPath) {
+    console.error("PROMPTOR_PATH environment variable is not set.");
+    process.exit(1);
+  }
+
+  // Split the PROMPTOR_PATH into an array of directories
+  const directories = promptorPath.split(":");
+
+  // Initialize a Set to store unique filenames
+  const filesSet = new Set();
+
+  // Iterate over each directory
+  directories.forEach((dir) => {
+    if (fs.existsSync(dir) && fs.lstatSync(dir).isDirectory()) {
+      // Read the contents of the directory
+      const files = fs.readdirSync(dir).filter((file) => file.endsWith(".md"));
+
+      // Add each file to the Set (to avoid duplicates)
+      files.forEach((file) => filesSet.add(file.replace(".md", "")));
+    }
+  });
+
+  // Print the unique filenames (one per line)
+  filesSet.forEach((file) => console.log(file));
+
+  // Exit after producing the completion list
+  process.exit(0);
+}
+
+// Handle regular commands
+if (args.length === 0) {
+  console.error("No filename provided.");
+  process.exit(1);
+}
+
+const filenameWithoutExtension = args[0];
+let foundFilePath = null;
+
+// Get the PROMPTOR_PATH environment variable
+const promptorPath = process.env.PROMPTOR_PATH;
+
+if (!promptorPath) {
+  console.error("PROMPTOR_PATH environment variable is not set.");
+  process.exit(1);
+}
+
+// Split the PROMPTOR_PATH into an array of directories
+const directories = promptorPath.split(":");
+
+// Search for the file in the directories
+for (const dir of directories) {
+  if (fs.existsSync(dir) && fs.lstatSync(dir).isDirectory()) {
+    const potentialFilePath = path.join(dir, `${filenameWithoutExtension}.md`);
+    if (fs.existsSync(potentialFilePath)) {
+      foundFilePath = potentialFilePath;
+      break; // Stop searching once the file is found
+    }
+  }
+}
+
+if (!foundFilePath) {
+  console.error(`File "${filenameWithoutExtension}.md" not found in any directories.`);
+  process.exit(1);
+}
+
+const processedContent = replaceLinksInMarkdown(foundFilePath);
+  // Copy the content to the clipboard using pbcopy
+const output = execSync("pbcopy", {
+  input: processedContent.replace(/"/g, '\\"'),
+  encoding: 'utf8', // Ensure the output is returned as a string
+});
+console.log(`Processed content of "${filenameWithoutExtension}.md" has been copied to the clipboard.`);

@@ -1,0 +1,19 @@
+#compdef promptor
+
+# Function to generate autocomplete options
+_promptor_autocomplete() {
+  # Get the current word being typed
+  local cur="${words[CURRENT]}"
+
+  # Get the list of files from the `promptor` command
+  local options=("${(@f)$(promptor --complete)}")
+
+  #echo OPTIONS $options
+  #echo CUR $cur
+
+  # Use the Zsh built-in function `compadd` to suggest options
+  compadd -a options
+}
+
+# Tell Zsh to use the _promptor_autocomplete function for promptor
+compdef _promptor_autocomplete promptor
