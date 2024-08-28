@@ -15,10 +15,10 @@ ShellPromptor is a tool designed to prime the context of Large Language Models (
 
 ## Installation
 
-Save the script to a file, for example, `shellpromptor.js`, and make it executable:
+Save the script to a file, for example, `promptor`, and make it executable:
 
 ```bash
-chmod +x shellpromptor.js
+chmod +x promptor
 ```
 
 Ensure that Node.js v22 or later is installed on your system, as the tool relies on modern features of Node.js.
@@ -30,20 +30,21 @@ Ensure that Node.js v22 or later is installed on your system, as the tool relies
 To process and copy a Markdown file's content to your clipboard:
 
 ```bash
-./shellpromptor.js your_markdown_file
+./promptor your_markdown_file
 ```
+
 
 This will:
 1. Search for `your_markdown_file.md` in the directories specified by the `PROMPTOR_PATH` environment variable.
-2. Replace any `file://` and `files://` links within the Markdown content, potentially combining multiple files.
-3. Copy the fully processed content to your clipboard, ready to be pasted into an LLM chat.
+2. Replace any `file://` and `files://` links within the Markdown content, potentially combining recursively multiple files.
+3. Copy the fully processed content to your MacOS clipboard, ready to be pasted into an LLM chat.
 
 ### Autocompletion Feature
 
-To enable rapid prompt selection, you can list available Markdown files using the `--complete` flag:
+To enable rapid prompt selection, you can list available Markdown files using the `--complete` flag to enable zsh autocomplete:
 
 ```bash
-./shellpromptor.js --complete
+./promptor --complete
 ```
 
 This will output a list of Markdown filenames found in the directories specified by `PROMPTOR_PATH`, which can be used for Zsh autocompletion.
@@ -85,11 +86,11 @@ ShellPromptor includes a custom Zsh autocomplete function to make selecting prom
 
 #### Step 1: Priming an LLM
 
-1. Ensure your `PROMPTOR_PATH` is set to include directories containing your Markdown files.
+1. Ensure your `PROMPTOR_PATH` is set to include directories separated by a : containing your Markdown files.
 2. Run ShellPromptor with the desired filename:
 
    ```bash
-   ./shellpromptor.js project_overview
+   ./promptor project_overview
    ```
 
 3. The content of `project_overview.md` (along with any linked files) is processed and copied to your clipboard.
@@ -100,7 +101,7 @@ ShellPromptor includes a custom Zsh autocomplete function to make selecting prom
 To quickly find and select a file:
 
 ```bash
-./shellpromptor.js --complete
+./promptor --complete
 ```
 
 This outputs all Markdown files in your specified directories, allowing you to quickly select the correct one using Zsh autocomplete.
