@@ -12,6 +12,8 @@ ShellPromptor is a tool designed to prime the context of Large Language Models (
   - **Multiple File Links (`files://`)**: Uses Node.js v22's globbing mechanism to resolve and embed content from multiple files matching a pattern.
 - **Recursive Content Embedding**: Handles recursive inclusion of linked files, ensuring that even complex documents can be processed and included.
 - **Context Priming**: Designed specifically for priming LLMs with relevant content, such as project source code, documentation, or any other necessary files, before starting a chat session.
+- **Verbose Mode**: Provides additional output for debugging and insight into the script's operations when the `-v` flag is used.
+- **Prompt Splitting**: Automatically splits large prompts into manageable chunks, using the `PROMPTOR_PROMPT_SIZE` environment variable to control the size of each chunk.
 
 ## Installation
 
@@ -21,7 +23,7 @@ Save the script to a file, for example, `promptor`, and make it executable:
 chmod +x promptor
 ```
 
-Ensure that Node.js v22 or later is installed on your system, as the tool relies on modern features of Node.js.
+Ensure that [Node.js v22](https://nodejs.org/en) or later is installed on your system, as the tool relies on modern features of Node.js.
 
 ## Usage
 
@@ -33,15 +35,36 @@ To process and copy a Markdown file's content to your clipboard:
 ./promptor your_markdown_file
 ```
 
-
 This will:
 1. Search for `your_markdown_file.md` in the directories specified by the `PROMPTOR_PATH` environment variable.
 2. Replace any `file://` and `files://` links within the Markdown content, potentially combining recursively multiple files.
 3. Copy the fully processed content to your MacOS clipboard, ready to be pasted into an LLM chat.
 
+### Verbose Mode
+
+To enable verbose output, which provides additional information during script execution, use the `-v` flag:
+
+```bash
+./promptor -v your_markdown_file
+```
+
+When verbose mode is enabled, the script will print details such as file paths, processing steps, and any errors encountered during execution.
+
+### Prompt Splitting
+#### Chat Message Size Limitations
+Different LLM chatbots, like ChatGPT, Gemini, ClaudeAI, and LLAMA, have varying limits on the size of a single input message. These limits can change as the chatbots evolve. ShellPromptor addresses this by automatically splitting large content into smaller chunks, configurable via the `PROMPTOR_PROMPT_SIZE` environment variable. Be sure to adjust this setting based on the specific size limits of the LLM you’re using to ensure smooth interactions.
+
+If the processed content exceeds a certain size, ShellPromptor will automatically split it into smaller chunks to fit within the limitations of LLM input fields. By default, each chunk is 65,000 characters, but this can be adjusted by setting the `PROMPTOR_PROMPT_SIZE` environment variable:
+
+```bash
+export PROMPTOR_PROMPT_SIZE=50000
+```
+
+This setting allows you to control how much content is included in each chunk, making it easier to manage large documents.
+
 ### Autocompletion Feature
 
-To enable rapid prompt selection, you can list available Markdown files using the `--complete` flag to enable zsh autocomplete:
+To enable rapid prompt selection, you can list available Markdown files using the `--complete` flag to enable Zsh autocomplete:
 
 ```bash
 ./promptor --complete
@@ -86,7 +109,7 @@ ShellPromptor includes a custom Zsh autocomplete function to make selecting prom
 
 #### Step 1: Priming an LLM
 
-1. Ensure your `PROMPTOR_PATH` is set to include directories separated by a : containing your Markdown files.
+1. Ensure your `PROMPTOR_PATH` is set to include directories separated by a `:` containing your Markdown files.
 2. Run ShellPromptor with the desired filename:
 
    ```bash

@@ -1,8 +1,11 @@
-#!/usr/bin/env node
+#!/usr/bin/env node --no-warnings
 
 const fs = require("fs");
 const path = require("path");
+const readline = require("readline");
 const { execSync } = require("child_process");
+
+let verbose = false;
 
 // Function to replace environment variables in a file path
 function replaceEnvVars(filePath) {
@@ -39,7 +42,7 @@ function replaceFileLinksInMarkdown(markdownFilePath, recursiveDepth = 0) {
       const fileExtension = path.extname(linkedFilePath);
       const fileName = path.basename(linkedFilePath);
       const fileContent = replaceFileLinksInMarkdown(linkedFilePath, recursiveDepth + 1);
-
+      if(verbose) console.error(`Reading in ${linkedFilePath} (${Math.round(fileContent.length/100)/10}kB)`);
       if (fileExtension === ".md") {
         return renderMarkdownLinkOutput(linkText, fileContent);
       } else {
@@ -66,12 +69,14 @@ function replaceFilesLinksInMarkdown(markdownContent, markdownFilePath) {
       return files.map(file => {
         const fileExtension = path.extname(file);
         const fileName = path.basename(file);
-        const fileContent = fs.readFileSync(file, "utf8");
-
-        if (fileExtension === ".md") {
-          return renderMarkdownLinkOutput(linkText, fileContent);
-        } else {
-          return renderNonMarkdownLinkOutput(linkText, fileName, fileContent, fileExtension);
+        if(!fs.statSync(file).isDirectory()) {
+          const fileContent = fs.readFileSync(file, "utf8");
+          if(verbose) console.error(`Reading in ${file} (${Math.round(fileContent.length/100)/10}kB)`);
+          if (fileExtension === ".md") {
+            return renderMarkdownLinkOutput(linkText, fileContent);
+          } else {
+            return renderNonMarkdownLinkOutput(linkText, fileName, fileContent, fileExtension);
+          }
         }
       }).join("\n");
     }
@@ -81,7 +86,6 @@ function replaceFilesLinksInMarkdown(markdownContent, markdownFilePath) {
 // Combined function to replace all types of file links in markdown content
 function replaceLinksInMarkdown(markdownFilePath) {
   let markdownContent = fs.readFileSync(markdownFilePath, "utf8");
-
   // Replace file:// links
   markdownContent = replaceFileLinksInMarkdown(markdownFilePath);
   // Replace files:// links
@@ -90,14 +94,45 @@ function replaceLinksInMarkdown(markdownFilePath) {
   return markdownContent;
 }
 
-// Get the arguments passed to the script
-const args = process.argv.slice(2);
+function splitTextIntoChunks(text, chunkSize) {
+  const chunks = [];
+  for (let i = 0; i < text.length; i += chunkSize) {
+    const t = text.slice(i, i + chunkSize) + ((i + chunkSize < text.length) 
+      ? '\n\n... more info will follow; just respond "OK" \n\n' 
+      : '\n\n ---');
+    chunks.push(t)
+  };
+  return chunks;
+}
 
-// Define the flag that triggers completion output
-const completionFlag = "--complete";
+async function copyChunksToClipboard(chunks) {
+  const totalChunks = chunks.length;
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  for (let i = 0; i < totalChunks; i++) {
+      const chunk = chunks[i];//.replace(/"/g, '\\"'); // Escape double quotes
+
+      execSync("pbcopy", {
+          input: chunk,
+          encoding: 'utf8'
+      });
+      console.log(`Part ${i + 1}/${totalChunks} copied to clipboard; press return for copying the next part.`);
+      
+      // Wait for the user to press return
+      await new Promise((resolve) => rl.question('', () => resolve()));
+  }
+
+  rl.close();
+}
+
+// Get the arguments passed to the script
+let args = process.argv.slice(2);
+if (args.includes("-v")) {
+  args = args.filter(arg => arg !== "-v");
+  verbose = true;
+}
 
 // Output Autocomplete Options
-if (args.includes(completionFlag)) {
+if (args.includes("--complete")) {
   // Get the PROMPTOR_PATH environment variable
   const promptorPath = process.env.PROMPTOR_PATH;
 
@@ -166,10 +201,20 @@ if (!foundFilePath) {
   process.exit(1);
 }
 
-const processedContent = replaceLinksInMarkdown(foundFilePath);
+const processedContent = replaceLinksInMarkdown(foundFilePath);//.replace(/"/g, '\\"');
+
+const promptSize = parseInt(process.env.PROMPTOR_PROMPT_SIZE || "65000", 10);
+
+if (processedContent.length > promptSize) {
+  const chunks = splitTextIntoChunks(processedContent, promptSize);
+  copyChunksToClipboard(chunks).then(() => console.log('All parts copied to clipboard.'));
+} else {
   // Copy the content to the clipboard using pbcopy
-const output = execSync("pbcopy", {
-  input: processedContent.replace(/"/g, '\\"'),
-  encoding: 'utf8', // Ensure the output is returned as a string
-});
-console.log(`Processed content of "${filenameWithoutExtension}.md" has been copied to the clipboard.`);
+  const output = execSync("pbcopy", { input: processedContent, encoding: 'utf8' });
+  console.log(`Processed content of "${filenameWithoutExtension}.md" has been copied to the clipboard.`);
+}
+
+
+
+
+
